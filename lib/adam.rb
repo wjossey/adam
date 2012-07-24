@@ -1,6 +1,8 @@
 require 'adam/logging'
 require 'adam/client'
+require 'adam/worker'
 require 'adam/amqp_connection'
+require 'em-synchrony/amqp'
 
 require 'multi_json'
 
@@ -8,7 +10,12 @@ module Adam
 
   #Any default configurations go here
   DEFAULTS = {
-
+    :queues => [],
+    :concurrency => 25,
+    :require => '.',
+    :environment => nil,
+    :timeout => 8,
+    :enable_rails_extensions => true
   }
 
   def self.options
@@ -61,7 +68,7 @@ module Adam
   def self.channel(&block)
     raise ArgumentError, "requires a block" if !block
     Adam.conn do |conn|
-      @channel ||= AMQP::Channel.new(conn)
+      @channel ||= EM::Synchrony::AMQP::Channel.new(conn)
       block.call(@channel)
     end    
   end
@@ -80,5 +87,9 @@ module Adam
     @conn ||= Adam::AMQPConnection.create
     raise ArgumentError, "requires a block" if !block
     @conn.with(&block)
+  end
+
+  def self.dump_json(object)
+    MultiJson.encode(object)
   end
 end

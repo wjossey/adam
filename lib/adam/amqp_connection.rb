@@ -1,6 +1,6 @@
 require 'connection_pool'
 
-module Adam
+module Adam 
   class AMQPConnection
     def self.create(options={})
       url = options[:url] || '127.0.0.1'
@@ -8,7 +8,7 @@ module Adam
       size = options[:size] || (Adam.server? ? (Adam.options[:concurrency] + 2) : 5)
 
       ConnectionPool.new(:timeout => 1, :size => size) do
-        AMQP.connect(:host => url)
+        connection = EM::Synchrony::AMQP.connect(:host => url)
       end
     end
   end

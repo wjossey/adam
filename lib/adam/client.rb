@@ -14,12 +14,20 @@ module Adam
       raise "There needs to be a reactor running to use the ruby-AMQP gem" unless EM.reactor_running?
       worker_class = item['class']
       item['class'] = item['class'].to_s
+      item = worker_class.get_adam_options.merge(item)
+      item['retry'] = !!item['retry']
 
       Adam.channel do |channel|
-        queue    = channel.queue(item['queue'], :auto_delete => false)
-        exchange = channel.direct("")
-        exchange.publish item['message'], :routing_key => queue.name
+        queue    = EM::Synchrony::AMQP::Queue.new(channel, item['queue'], :auto_delete => false)
+        exchange = EM::Synchrony::AMQP::Exchange.new(channel, :direct, "#{item['queue']}.exchange")
+        queue.bind(exchange)
+        payload = Adam.dump_json(item)
+        exchange.publish payload
       end
+    end
+
+    def self.enqueue(klass, *args)
+      klass.perform_async(*args)
     end
   end
 end
