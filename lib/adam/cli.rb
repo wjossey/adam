@@ -85,8 +85,7 @@ module Adam
     private
 
     def queues
-      class_names = Module.constants.select { |c| (eval c.to_s).is_a?(Class) && (eval c.to_s).respond_to?(:adam_options)}
-      class_names.map {|class_name| (eval class_name.to_s).adam_options["queue"]}
+      @class_names ||= Adam::Worker.classes.map! {|class_name| (eval class_name.to_s).adam_options["queue"]}.uniq
     end
 
     def die(code)
