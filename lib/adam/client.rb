@@ -25,9 +25,7 @@ module Adam
         @exchange.on_return do |basic_return, metadata, payload|
           logger.info "#{payload} was returned! reply_code = #{basic_return.reply_code}, reply_text = #{basic_return.reply_text}"
         end
-        EventMachine.defer do
-          result = @exchange.publish(payload)
-        end        
+        result = @exchange.publish(payload)        
       end
     end
 
