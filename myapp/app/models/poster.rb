@@ -1,8 +1,8 @@
 require 'adam'
 
-class Post# < ActiveRecord::Base
+class Poster# < ActiveRecord::Base
   include Adam::Worker
-  adam_options :queue => 'amqp.demo.example_queue'
+  adam_options :queue => 'amqp.demo.poster_queue'
 
   def perform(args)
     EM::Synchrony.sleep(0.05)

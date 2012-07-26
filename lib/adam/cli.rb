@@ -28,19 +28,19 @@ require 'optparse'
 
 require 'adam'
 require 'adam/util'
+require 'adam/manager'
 require 'em-synchrony'
 module Adam
   class CLI
     include Singleton
     include Util
 
-    SIZE = 100
+    SIZE = 250
 
-    def initialize 
+    def initialize(options={})
       @code = nil
       @interrupt_mutex = Mutex.new
-      @interrupted = false
-      @fiber_pool = ::FiberPool.new(SIZE)
+      @interrupted = false      
       puts "Fiber pool initialized"
     end
 
@@ -60,47 +60,16 @@ module Adam
     end
 
     def run
-      puts "Omgz we're running"
+      #Wrap everything in a synchrony block, as AMQP needs it
       EM.synchrony do
-        begin 
-          connection = AMQP.connect(:host => '127.0.0.1')
-          puts "Connected to broker"
-          channel = AMQP::Channel.new(connection)
-          # exchange = channel.direct("amqp.demo.example_queue1")
-          # channel.prefetch(1)
-          # queue = channel.queue('amqp.demo.example_queue1')
-          # queue.bind(exchange, :routing_key => 'amqp.demo.example_queue1')
-          # puts "Subscribing to queue"
-
-          queue    = EM::Synchrony::AMQP::Queue.new(channel, 'amqp.demo.example_queue1', :auto_delete => false)
-          exchange = EM::Synchrony::AMQP::Exchange.new(channel, :direct, "amqp.demo.example_queue1.exchange")
-          queue.bind(exchange)
-
-          queue.subscribe do |header, payload|
-            msg = Adam.load_json(payload)
-            klass = constantize(msg['class'])
-            worker = klass.new
-            worker.perform(*msg['args'])
-          end
-          puts "Subscribed"
+        begin
+          @manager = Adam::Manager.new(options.merge!({:queues => queues}))
+          @manager.run!                
         rescue Interrupt
           logger.info "Shutting down"
           exit(0)
         end
       end
-      # @manager = Adam::Manager.new(options)
-      # begin
-      #   logger.info 'Starting processing, hit Ctrl-C to stop'
-      #   @manager.start!
-      #   sleep
-      # rescue Interrupt
-      #   logger.info 'Shutting down'
-      #   @manager.stop!(:shutdown => true, :timeout => options[:timeout])
-      #   @manager.wait(:shutdown)
-      #   # Explicitly exit so busy Processor threads can't block
-      #   # process shutdown.
-      #   exit(0)
-      # end
     end
 
     def interrupt
@@ -114,6 +83,11 @@ module Adam
     end
 
     private
+
+    def queues
+      class_names = Module.constants.select { |c| (eval c.to_s).is_a?(Class) && (eval c.to_s).respond_to?(:adam_options)}
+      class_names.map {|class_name| (eval class_name.to_s).adam_options["queue"]}
+    end
 
     def die(code)
       exit(code)
@@ -233,87 +207,4 @@ module Adam
       end
     end
   end
-end
-
-# Author::    Mohammad A. Ali  (mailto:oldmoe@gmail.com)
-# Copyright:: Copyright (c) 2008 eSpace, Inc.
-# License::   Distributes under the same terms as Ruby
-
-require 'fiber'
-
-class Fiber
-  
-  #Attribute Reference--Returns the value of a fiber-local variable, using
-  #either a symbol or a string name. If the specified variable does not exist,
-  #returns nil.
-  def [](key)
-    local_fiber_variables[key]
-  end
-  
-  #Attribute Assignment--Sets or creates the value of a fiber-local variable,
-  #using either a symbol or a string. See also Fiber#[].
-  def []=(key,value)
-    local_fiber_variables[key] = value
-  end
-  
-  private
-  
-  def local_fiber_variables
-    @local_fiber_variables ||= {}
-  end
-end
-
-class FiberPool
-
-  # gives access to the currently free fibers
-  attr_reader :fibers
-  attr_reader :busy_fibers
-
-  # Code can register a proc with this FiberPool to be called
-  # every time a Fiber is finished.  Good for releasing resources
-  # like ActiveRecord database connections.
-  attr_accessor :generic_callbacks
-
-  # Prepare a list of fibers that are able to run different blocks of code
-  # every time. Once a fiber is done with its block, it attempts to fetch
-  # another one from the queue
-  def initialize(count = 100)
-    @fibers,@busy_fibers,@queue,@generic_callbacks = [],{},[],[]
-    count.times do |i|
-      fiber = Fiber.new do |block|
-        loop do
-          block.call
-          # callbacks are called in a reverse order, much like c++ destructor
-          Fiber.current[:callbacks].pop.call while Fiber.current[:callbacks].length > 0
-          generic_callbacks.each do |cb|
-            cb.call
-          end
-          unless @queue.empty?
-            block = @queue.shift
-          else
-            @busy_fibers.delete(Fiber.current.object_id)
-            @fibers.unshift Fiber.current
-            block = Fiber.yield
-          end
-        end
-      end
-      fiber[:callbacks] = []
-      fiber[:em_keys] = []
-      @fibers << fiber
-    end
-  end
-
-  # If there is an available fiber use it, otherwise, leave it to linger
-  # in a queue
-  def spawn(&block)
-    if fiber = @fibers.shift
-      fiber[:callbacks] = []
-      @busy_fibers[fiber.object_id] = fiber
-      fiber.resume(block)
-    else
-      @queue << block
-    end
-    self # we are keen on hiding our queue
-  end
-
 end

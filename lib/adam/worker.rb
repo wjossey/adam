@@ -5,8 +5,14 @@ module Adam
 
   module Worker
     def self.included(base)
+      @classes ||= []
+      @classes << base.name
       base.extend(ClassMethods)
       base.class_attribute :adam_options_hash
+    end
+
+    def self.classes
+      @classes
     end
 
     def logger

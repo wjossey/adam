@@ -18,11 +18,16 @@ module Adam
       item['retry'] = !!item['retry']
 
       Adam.channel do |channel|
-        queue    = EM::Synchrony::AMQP::Queue.new(channel, item['queue'], :auto_delete => false)
-        exchange = EM::Synchrony::AMQP::Exchange.new(channel, :direct, "#{item['queue']}.exchange")
-        queue.bind(exchange)
+        @queue    ||= EM::Synchrony::AMQP::Queue.new(channel, item['queue'], :auto_delete => false)
+        @exchange ||= EM::Synchrony::AMQP::Exchange.new(channel, :direct, "#{item['queue']}.exchange")
+        @queue.bind(@exchange)
         payload = Adam.dump_json(item)
-        exchange.publish payload
+        @exchange.on_return do |basic_return, metadata, payload|
+          logger.info "#{payload} was returned! reply_code = #{basic_return.reply_code}, reply_text = #{basic_return.reply_text}"
+        end
+        EventMachine.defer do
+          result = @exchange.publish(payload)
+        end        
       end
     end
 

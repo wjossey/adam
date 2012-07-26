@@ -67,10 +67,21 @@ module Adam
 
   def self.channel(&block)
     raise ArgumentError, "requires a block" if !block
-    Adam.conn do |conn|
-      @channel ||= EM::Synchrony::AMQP::Channel.new(conn)
-      block.call(@channel)
-    end    
+    @channels ||= []
+    @mutex ||= EM::Synchrony::Thread::Mutex.new
+    @mutex.synchronize do
+      #Pseudo channel pool. Round robin approach
+      if @channels.empty?
+        Adam.conn do |conn|
+          10.times do 
+            @channels << EM::Synchrony::AMQP::Channel.new(conn)
+          end
+        end        
+      end
+    end
+    channel = @channels.pop
+    @channels.insert(0, channel)
+    block.call(channel)
   end
 
   def self.conn=(hash)
