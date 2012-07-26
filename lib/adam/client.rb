@@ -22,10 +22,10 @@ module Adam
         @exchange ||= EM::Synchrony::AMQP::Exchange.new(channel, :direct, "#{item['queue']}.exchange")
         @queue.bind(@exchange)
         payload = Adam.dump_json(item)
-        @exchange.on_return do |basic_return, metadata, payload|
-          logger.info "#{payload} was returned! reply_code = #{basic_return.reply_code}, reply_text = #{basic_return.reply_text}"
+        @exchange.on_return do |basic_return, metadata, return_payload|
+          logger.info "#{return_payload} was returned! reply_code = #{basic_return.reply_code}, reply_text = #{basic_return.reply_text}"
         end
-        result = @exchange.publish(payload)        
+        @exchange.publish(payload)
       end
     end
 
