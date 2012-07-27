@@ -17,6 +17,10 @@ Installation
 -----------------
 
     gem install adam
+    
+Usage
+-----------------
+    bundle exec adam
 
 License
 -----------------
